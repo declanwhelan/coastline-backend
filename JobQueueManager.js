@@ -42,6 +42,8 @@ export default class JobQueueManager {
     }
 
     cancelScheduledJob(id) {
-        scheduledJobs[id].cancel();
+        if(scheduledJobs[id] != undefined){
+            scheduledJobs[id].cancel();
+        }
     }
 }

@@ -10,7 +10,7 @@ import SocketManager from './SocketManager.js';
 import JobQueueManager from './JobQueueManager.js';
 
 // used for third party. they can have random rate limits on the free tier.
-const WEATHER_RATE_LIMIT_HIT = 4290001;
+const WEATHER_RATE_LIMIT_HIT = 429001;
 const weatherData = [];
 let socketManager = null;
 let jobQueueManager = null;
@@ -55,6 +55,7 @@ function cancelJob(data) {
     if (!jobQueueManager.jobQueued(data.id)) 
         socketManager.sendError("Job could not be found.")
     else {
+        jobQueueManager.cancelScheduledJob(data.id);
         jobQueueManager.removeFromQueue(data.id)
         sendStatus();
     }
@@ -83,7 +84,7 @@ function weatherCheckJob(id) {
         resp.on('data', (chunk) => data += chunk)
         resp.on('end', () => {
             const response = JSON.parse(data);
-            if (response.data) {
+            if (response.data !== undefined) {
                 weatherData.push({
                     location: locationTypes[jobDetails.location].name,
                     datetime: new Date(),
@@ -95,7 +96,7 @@ function weatherCheckJob(id) {
                 weatherData.push({
                     location: locationTypes[jobDetails.location].name,
                     datetime: new Date(),
-                    data: jobDetails.location === 1 ? exDublin.data.values : exNYC.data.values
+                    data: jobDetails.location === 1 ? exDublin.data : exNYC.data
                 })
                 jobQueueManager.removeFromQueue(jobDetails.id);
                 sendStatus();

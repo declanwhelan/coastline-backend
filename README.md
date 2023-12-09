@@ -11,6 +11,8 @@
  - then to run the app run 
 
     ``` node index.js ```
+   
+   and it will start running on port 8080
 
 *App requires a version of node 17+. This is due to the fallback for when the 3rd party API is rate limiting the free account. It is using a new enough experimental way to import JSON files. Usually this is not something you would do in a production environment but it stops this example from looking very broken for the testers sake*
 

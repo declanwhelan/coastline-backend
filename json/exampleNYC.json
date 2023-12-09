@@ -1,0 +1,33 @@
+{
+    "data": {
+        "time": "2023-12-06T18:01:00Z",
+        "values": {
+            "cloudBase": 1.01,
+            "cloudCeiling": 1.01,
+            "cloudCover": 75,
+            "dewPoint": -2.31,
+            "freezingRainIntensity": 0,
+            "humidity": 55,
+            "precipitationProbability": 0,
+            "pressureSurfaceLevel": 1014.25,
+            "rainIntensity": 0,
+            "sleetIntensity": 0,
+            "snowIntensity": 0,
+            "temperature": 5.69,
+            "temperatureApparent": 5.69,
+            "uvHealthConcern": 0,
+            "uvIndex": 0,
+            "visibility": 16,
+            "weatherCode": 1001,
+            "windDirection": 238.5,
+            "windGust": 4.88,
+            "windSpeed": 2.5
+        }
+    },
+    "location": {
+        "lat": 40.71272659301758,
+        "lon": -74.00601196289062,
+        "name": "City of New York, New York, United States",
+        "type": "administrative"
+    }
+}

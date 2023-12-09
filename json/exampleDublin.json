@@ -1,0 +1,33 @@
+{
+    "data": {
+        "time": "2023-12-06T19:21:00Z",
+        "values": {
+            "cloudBase": 0.12,
+            "cloudCeiling": 0.12,
+            "cloudCover": 76,
+            "dewPoint": 7,
+            "freezingRainIntensity": 0,
+            "humidity": 93,
+            "precipitationProbability": 100,
+            "pressureSurfaceLevel": 988.62,
+            "rainIntensity": 1.59,
+            "sleetIntensity": 0,
+            "snowIntensity": 0,
+            "temperature": 7.88,
+            "temperatureApparent": 7.88,
+            "uvHealthConcern": 0,
+            "uvIndex": 0,
+            "visibility": 9.8,
+            "weatherCode": 4200,
+            "windDirection": 151.13,
+            "windGust": 15.81,
+            "windSpeed": 10.19
+        }
+    },
+    "location": {
+        "lat": 53.34938049316406,
+        "lon": -6.26055908203125,
+        "name": "Dublin, County Dublin, Leinster, Éire / Ireland",
+        "type": "administrative"
+    }
+}

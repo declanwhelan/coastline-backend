@@ -1,33 +1,28 @@
 import 'dotenv/config'
 import moment from "moment";
 import https from 'https';
-import { WebSocketServer } from "ws";
-import { v4 as uuid } from 'uuid';
-import { scheduleJob, scheduledJobs } from "node-schedule";
 
 // json fallback examples
 import exDublin from './json/exampleDublin.json' assert {type: 'json'};
 import exNYC from './json/exampleNYC.json' assert {type: 'json'};
 
+import SocketManager from './SocketManager.js';
+import JobQueueManager from './JobQueueManager.js';
+
 // used for third party. they can have random rate limits on the free tier.
 const WEATHER_RATE_LIMIT_HIT = 4290001;
-const jobQueue = [];
 const weatherData = [];
+let socketManager = null;
+let jobQueueManager = null;
 
-// make the Websocket global so we can use it all over instead of passing.
-let globalWS = null;
-const wss = new WebSocketServer({ port: 8080 });
-
-
-// used to ascertain the location 3rd party API urls
 const locationTypes = {
-    1: { 
-        name: "Dublin", 
-        url: `https://api.tomorrow.io/v4/weather/realtime?location=dublin&apikey=${process.env.TOMORROW_API_KEY}` 
+    1: {
+        name: "Dublin",
+        url: `https://api.tomorrow.io/v4/weather/realtime?location=dublin&apikey=${process.env.TOMORROW_API_KEY}`
     },
-    2: { 
-        name: "New York", 
-        url: `https://api.tomorrow.io/v4/weather/realtime?location=new%20york&apikey=${process.env.TOMORROW_API_KEY}` 
+    2: {
+        name: "New York",
+        url: `https://api.tomorrow.io/v4/weather/realtime?location=new%20york&apikey=${process.env.TOMORROW_API_KEY}`
     }
 }
 
@@ -39,108 +34,75 @@ const locationIDs = [
     { id: 2, name: 'New York' }
 ]
 
-wss.on("connection", function connection(ws) {
-    globalWS = ws;
-    ws.on("message", function message(data) {
-        const parsedData = JSON.parse(data);
-        
-        switch(parsedData.type) {
-            case "cancel": 
-                const jobIndex = jobQueue.findIndex((obj) => obj.id === parsedData.id);
-                if (jobIndex < 0) sendError("Job could not be found.")
-                else {
-                    jobQueue.splice(jobIndex, 1);
-                    scheduledJobs[parsedData.id].cancel();
-                    sendStatus();
-                } 
-                break;
-            case "locations": 
-                sendData({type: 'locations', data: locationIDs })
-                break;
-            case "status":
-                sendStatus();
-                break;
-            case "schedule": 
-                generateJobAndSchedule(parsedData.data)
-                break;
-            default: 
-                sendError("Message incorrectly formatted")
-        }
+function start() {
+    socketManager = new SocketManager(8080);
+    jobQueueManager = new JobQueueManager(locationTypes);
 
-    });
-});
-
-function sendData(details) {
-    globalWS.send(JSON.stringify(details));
+    socketManager.on('status', sendStatus)
+    socketManager.on('cancel', cancelJob)
+    socketManager.on('locations', () => socketManager.sendData('locations', locationIDs))
+    socketManager.on('schedule', scheduleJob)
+    socketManager.on('error', (data) => socketManager.sendError(data))
 }
 
-function sendError(text) {
-    sendData({type: "error", data: text})
-}
 function sendStatus() {
-    const organisedJobs = jobQueue.sort((a, b) =>  moment(a.runtime).diff(moment(b.runtime)))
-    const organisedWeather = weatherData.sort((a, b) =>  moment(a.data.time).diff(moment(b.data.time)))
-    sendData({
-        type: 'status',
-        data: {
-            jobs: organisedJobs, 
-            results: organisedWeather.reverse().slice(0,10),
-        }
-    });
+    const organisedJobs = jobQueueManager.jobQueue.sort((a, b) => moment(a.runtime).diff(moment(b.runtime)))
+    const organisedWeather = weatherData.sort((a, b) => moment(a.data.time).diff(moment(b.data.time)))
+    socketManager.sendData('status', { jobs: organisedJobs, results: organisedWeather.reverse().slice(0, 10) });
 }
 
-function generateJobAndSchedule(job) {
-    const jobRecord = { id: uuid(), location: job.location, runtime: job.runtime }
-
-    const validDate = moment(jobRecord.runtime, "YYYY-MM-DDTHH:mm", true).isValid()
-    const validLocation = locationTypes[jobRecord.location] !== undefined
-    
-    if(validDate && validLocation) {
-        jobQueue.push(jobRecord);
-        scheduleJob(
-            jobRecord.id, 
-            moment(jobRecord.runtime, "YYYY-MM-DDTHH:mm").toDate(),
-            runWeatherCheckJob.bind(null, jobRecord.id)
-        );
+function cancelJob(data) {
+    if (!jobQueueManager.jobQueued(data.id)) 
+        socketManager.sendError("Job could not be found.")
+    else {
+        jobQueueManager.removeFromQueue(data.id)
         sendStatus();
-    } else {
-        if(!validDate) sendError("date is not in the correct format")
-        else if(!validLocation) sendError("the location you picked is not valid")
     }
 }
 
-function removeJobFromQueue(id) {
-    const jobIndex = jobQueue.findIndex((obj) => obj.id === id);
-    jobQueue.splice(jobIndex, 1);
+function scheduleJob(job) {
+    const jobRecord = jobQueueManager.generateJobRecord(job.location, job.runtime);
+
+    const validDate = jobQueueManager.isJobRecordDateValid(jobRecord)
+    const validLocation = jobQueueManager.isJobRecordLocationValid(jobRecord)
+
+    if (validDate && validLocation) {
+        jobQueueManager.addToQueue(jobRecord, weatherCheckJob);
+        sendStatus();
+    } else {
+        if (!validDate) socketManager.sendError("date is not in the correct format")
+        else if (!validLocation) socketManager.sendError("the location you picked is not valid")
+    }
 }
 
-function runWeatherCheckJob(id) {
-    const jobDetails = jobQueue.find((job) => job.id === id);
+function weatherCheckJob(id) {
+    const jobDetails = jobQueueManager.jobQueue.find((job) => job.id === id);
     const weatherApiUrl = locationTypes[jobDetails.location].url;
     https.get(weatherApiUrl, (resp) => {
         let data = '';
         resp.on('data', (chunk) => data += chunk)
         resp.on('end', () => {
             const response = JSON.parse(data);
-            if(response.data){
+            if (response.data) {
                 weatherData.push({
                     location: locationTypes[jobDetails.location].name,
-                    datetime: new Date(), 
+                    datetime: new Date(),
                     data: JSON.parse(data).data
                 });
-                removeJobFromQueue(jobDetails.id);
+                jobQueueManager.removeFromQueue(jobDetails.id);
                 sendStatus();
-            } else if(response.code === WEATHER_RATE_LIMIT_HIT) {
+            } else if (response.code === WEATHER_RATE_LIMIT_HIT) {
                 weatherData.push({
                     location: locationTypes[jobDetails.location].name,
                     datetime: new Date(),
                     data: jobDetails.location === 1 ? exDublin.data.values : exNYC.data.values
                 })
-                removeJobFromQueue(jobDetails.id);
+                jobQueueManager.removeFromQueue(jobDetails.id);
                 sendStatus();
-                sendError("rate limit for 3rd party app has been hit, falling back to some local data");
+                socketManager.sendError("rate limit for 3rd party app has been hit, falling back to some local data");
             }
         });
     })
 }
 
+start();
